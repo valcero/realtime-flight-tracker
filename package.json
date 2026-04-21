@@ -1,0 +1,19 @@
+{
+  "name": "realtime-flight-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Real-time flight tracking backend (OpenSky + Socket.IO).",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1"
+  }
+}
