@@ -5,9 +5,7 @@ const { Server } = require("socket.io");
 const { fetchOpenSkyStates } = require("./opensky");
 const { filterAirborneFlights } = require("./filterFlights");
 const { selectActiveFlights } = require("./selectFlights");
-
-const PORT = Number(process.env.PORT) || 3000;
-const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS) || 10_000;
+const { config } = require("./config");
 
 const app = express();
 app.get("/health", (_req, res) => {
@@ -17,16 +15,24 @@ app.get("/health", (_req, res) => {
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: "*",
+    origin: config.corsOrigin,
     methods: ["GET", "POST"]
   }
 });
 
 let lastPayload = null;
+let pollInFlight = false;
+let pollTimer = null;
 
 async function pollAndBroadcast() {
+  if (pollInFlight) return;
+  pollInFlight = true;
+
   try {
-    const { time, states } = await fetchOpenSkyStates();
+    const { time, states } = await fetchOpenSkyStates({
+      url: config.openSkyUrl,
+      timeoutMs: config.openSkyTimeoutMs
+    });
     const airborneFlights = filterAirborneFlights(states);
     const selectedFlights = selectActiveFlights(airborneFlights, 2);
 
@@ -40,7 +46,18 @@ async function pollAndBroadcast() {
     io.emit("flights:update", payload);
   } catch (err) {
     console.error("[poll] failed:", err?.message || err);
+    // Keep server alive; do not crash on transient API errors.
+    // If we have old data, clients will still see it on reconnect.
+  } finally {
+    pollInFlight = false;
   }
+}
+
+function scheduleNextPoll() {
+  pollTimer = setTimeout(async () => {
+    await pollAndBroadcast();
+    scheduleNextPoll();
+  }, config.pollIntervalMs);
 }
 
 io.on("connection", (socket) => {
@@ -48,11 +65,22 @@ io.on("connection", (socket) => {
   if (lastPayload) socket.emit("flights:update", lastPayload);
 });
 
-httpServer.listen(PORT, () => {
-  console.log(`[server] listening on http://localhost:${PORT}`);
-  console.log(`[poll] polling OpenSky every ${POLL_INTERVAL_MS}ms`);
+function shutdown(signal) {
+  console.log(`[server] shutting down (${signal})...`);
+  if (pollTimer) clearTimeout(pollTimer);
+  io.close(() => {
+    httpServer.close(() => process.exit(0));
+  });
+}
+
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+
+httpServer.listen(config.port, () => {
+  console.log(`[server] listening on http://localhost:${config.port}`);
+  console.log(`[poll] interval=${config.pollIntervalMs}ms timeout=${config.openSkyTimeoutMs}ms`);
 
   pollAndBroadcast();
-  setInterval(pollAndBroadcast, POLL_INTERVAL_MS);
+  scheduleNextPoll();
 });
 
