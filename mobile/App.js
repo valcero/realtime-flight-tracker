@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import { StyleSheet, Text, View } from "react-native";
 import useFlightSocket, {
@@ -5,44 +6,73 @@ import useFlightSocket, {
 } from "./src/hooks/useFlightSocket";
 import { SERVER_URL } from "./src/config";
 import FlightMap from "./src/components/FlightMap";
+import FlightInfoCard from "./src/components/FlightInfoCard";
+import ConnectionBanner from "./src/components/ConnectionBanner";
 
-function ConnectionIndicator({ status }) {
-  const colors = {
-    [CONNECTION_STATUS.CONNECTED]: "#4CAF50",
-    [CONNECTION_STATUS.CONNECTING]: "#FF9800",
-    [CONNECTION_STATUS.RECONNECTING]: "#FF9800",
-    [CONNECTION_STATUS.DISCONNECTED]: "#F44336",
-  };
-
-  return (
-    <View style={[styles.indicator, { backgroundColor: colors[status] }]}>
-      <Text style={styles.indicatorText}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
-      </Text>
-    </View>
-  );
-}
+const STALE_THRESHOLD_MS = 30_000;
 
 export default function App() {
-  const { flights, connectionStatus, lastUpdate } =
+  const { flights, connectionStatus, lastUpdate, reconnect } =
     useFlightSocket(SERVER_URL);
+  const [isStale, setIsStale] = useState(false);
+
+  useEffect(() => {
+    if (!lastUpdate) return;
+    setIsStale(false);
+
+    const timer = setTimeout(() => setIsStale(true), STALE_THRESHOLD_MS);
+    return () => clearTimeout(timer);
+  }, [lastUpdate]);
+
+  const isConnected = connectionStatus === CONNECTION_STATUS.CONNECTED;
 
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
+
       <View style={styles.header}>
         <Text style={styles.title}>Flight Tracker</Text>
-        <ConnectionIndicator status={connectionStatus} />
+        <View style={styles.headerRight}>
+          {isStale && (
+            <View style={styles.staleBadge}>
+              <Text style={styles.staleBadgeText}>Stale</Text>
+            </View>
+          )}
+          <ConnectionDot connected={isConnected} />
+        </View>
       </View>
 
       <FlightMap flights={flights} />
 
-      {flights.length === 0 && connectionStatus === CONNECTION_STATUS.CONNECTED && (
+      <ConnectionBanner status={connectionStatus} onReconnect={reconnect} />
+
+      {flights.length === 0 && isConnected && (
         <View style={styles.emptyOverlay}>
-          <Text style={styles.emptyText}>No active flights at the moment</Text>
+          <Text style={styles.emptyText}>
+            No active flights at the moment
+          </Text>
+        </View>
+      )}
+
+      {flights.length > 0 && (
+        <View style={styles.infoPanel}>
+          {flights.map((flight) => (
+            <FlightInfoCard key={flight.icao24} flight={flight} />
+          ))}
         </View>
       )}
     </View>
+  );
+}
+
+function ConnectionDot({ connected }) {
+  return (
+    <View
+      style={[
+        styles.dot,
+        { backgroundColor: connected ? "#4CAF50" : "#F44336" },
+      ]}
+    />
   );
 }
 
@@ -59,21 +89,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 16,
     backgroundColor: "#16213e",
+    zIndex: 5,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   title: {
     fontSize: 22,
     fontWeight: "bold",
     color: "#ffffff",
   },
-  indicator: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
-  indicatorText: {
+  staleBadge: {
+    backgroundColor: "#FF9800",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  staleBadgeText: {
     color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "700",
   },
   emptyOverlay: {
     position: "absolute",
@@ -90,5 +132,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
     overflow: "hidden",
+  },
+  infoPanel: {
+    position: "absolute",
+    bottom: 30,
+    left: 12,
+    right: 12,
   },
 });
