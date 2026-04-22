@@ -1,9 +1,10 @@
 import { StatusBar } from "expo-status-bar";
-import { StyleSheet, Text, View, ScrollView } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import useFlightSocket, {
   CONNECTION_STATUS,
 } from "./src/hooks/useFlightSocket";
 import { SERVER_URL } from "./src/config";
+import FlightMap from "./src/components/FlightMap";
 
 function ConnectionIndicator({ status }) {
   const colors = {
@@ -34,44 +35,13 @@ export default function App() {
         <ConnectionIndicator status={connectionStatus} />
       </View>
 
-      <ScrollView style={styles.content}>
-        <Text style={styles.subtitle}>
-          Server: {SERVER_URL}
-        </Text>
-        {lastUpdate && (
-          <Text style={styles.subtitle}>
-            Last update: {new Date(lastUpdate).toLocaleTimeString()}
-          </Text>
-        )}
-        <Text style={styles.subtitle}>
-          Flights: {flights.length}
-        </Text>
+      <FlightMap flights={flights} />
 
-        {flights.map((flight) => (
-          <View key={flight.icao24} style={styles.flightCard}>
-            <Text style={styles.callsign}>
-              {flight.callsign || "N/A"}
-            </Text>
-            <Text style={styles.detail}>ICAO: {flight.icao24}</Text>
-            <Text style={styles.detail}>
-              Position: {flight.lat?.toFixed(4)}, {flight.lon?.toFixed(4)}
-            </Text>
-            <Text style={styles.detail}>
-              Altitude: {flight.baroAltitude?.toFixed(0)} m
-            </Text>
-            <Text style={styles.detail}>
-              Speed: {flight.velocity?.toFixed(1)} m/s
-            </Text>
-            <Text style={styles.detail}>
-              Vertical Rate: {flight.verticalRate?.toFixed(1)} m/s
-            </Text>
-          </View>
-        ))}
-
-        {flights.length === 0 && connectionStatus === CONNECTION_STATUS.CONNECTED && (
-          <Text style={styles.empty}>No active flights at the moment</Text>
-        )}
-      </ScrollView>
+      {flights.length === 0 && connectionStatus === CONNECTION_STATUS.CONNECTED && (
+        <View style={styles.emptyOverlay}>
+          <Text style={styles.emptyText}>No active flights at the moment</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -105,36 +75,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
-  content: {
-    flex: 1,
-    padding: 20,
+  emptyOverlay: {
+    position: "absolute",
+    top: "50%",
+    left: 0,
+    right: 0,
+    alignItems: "center",
   },
-  subtitle: {
-    color: "#8892b0",
-    fontSize: 13,
-    marginBottom: 4,
-  },
-  flightCard: {
-    backgroundColor: "#16213e",
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 16,
-  },
-  callsign: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#e2e8f0",
-    marginBottom: 8,
-  },
-  detail: {
-    color: "#8892b0",
-    fontSize: 14,
-    marginBottom: 2,
-  },
-  empty: {
-    color: "#8892b0",
+  emptyText: {
+    color: "#fff",
     fontSize: 16,
-    textAlign: "center",
-    marginTop: 40,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    overflow: "hidden",
   },
 });
