@@ -18,6 +18,7 @@ function mapStateVectorToFlight(state) {
     onGround: state?.[8] ?? null,
     velocity: state?.[9] ?? null,
     heading: state?.[10] ?? null,
+    verticalRate: state?.[11] ?? null,
     geoAltitude: state?.[13] ?? null,
     timePosition: state?.[3] ?? null,
     lastContact: state?.[4] ?? null
