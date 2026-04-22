@@ -41,6 +41,10 @@ export default function useFlightSocket(serverUrl) {
       }
     });
 
+    socket.on("connect_error", () => {
+      setConnectionStatus(CONNECTION_STATUS.DISCONNECTED);
+    });
+
     socket.on("disconnect", (reason) => {
       setConnectionStatus(CONNECTION_STATUS.DISCONNECTED);
     });
