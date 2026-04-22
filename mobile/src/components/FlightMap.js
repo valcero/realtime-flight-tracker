@@ -1,5 +1,6 @@
 import { StyleSheet } from "react-native";
-import MapView, { Marker } from "react-native-maps";
+import MapView from "react-native-maps";
+import AnimatedFlightMarker from "./AnimatedFlightMarker";
 
 const INDIA_REGION = {
   latitude: 22.5,
@@ -11,19 +12,9 @@ const INDIA_REGION = {
 export default function FlightMap({ flights }) {
   return (
     <MapView style={styles.map} initialRegion={INDIA_REGION}>
-      {flights.map((flight) => {
-        if (flight.lat == null || flight.lon == null) return null;
-
-        return (
-          <Marker
-            key={flight.icao24}
-            coordinate={{ latitude: flight.lat, longitude: flight.lon }}
-            title={flight.callsign || flight.icao24}
-            description={`Alt: ${flight.baroAltitude?.toFixed(0) ?? "?"} m  |  Spd: ${flight.velocity?.toFixed(0) ?? "?"} m/s`}
-            pinColor="#4FC3F7"
-          />
-        );
-      })}
+      {flights.map((flight) => (
+        <AnimatedFlightMarker key={flight.icao24} flight={flight} />
+      ))}
     </MapView>
   );
 }
