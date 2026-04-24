@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Realtime Flight Tracker</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      border-bottom: 1px solid #334155;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .logo svg { flex-shrink: 0; }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 4px 12px;
+      border-radius: 999px;
+      border: 1px solid #334155;
+      background: #1e293b;
+    }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #ef4444;
+      transition: background 0.3s;
+    }
+
+    .status-dot.connected { background: #22c55e; }
+    .status-dot.stale { background: #f59e0b; }
+
+    #map { flex: 1; z-index: 0; }
+
+    .flight-panel {
+      position: absolute;
+      bottom: 24px;
+      left: 24px;
+      z-index: 1000;
+      display: flex;
+      gap: 12px;
+    }
+
+    .flight-card {
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(12px);
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 16px 20px;
+      min-width: 240px;
+      transition: border-color 0.3s, transform 0.2s;
+    }
+
+    .flight-card:hover {
+      border-color: #60a5fa;
+      transform: translateY(-2px);
+    }
+
+    .callsign {
+      font-size: 20px;
+      font-weight: 700;
+      color: #60a5fa;
+      letter-spacing: 0.05em;
+    }
+
+    .icao {
+      font-size: 11px;
+      color: #64748b;
+      margin-bottom: 10px;
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      padding: 3px 0;
+    }
+
+    .stat-label { color: #94a3b8; }
+    .stat-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+    .vertical-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-top: 6px;
+    }
+
+    .climbing { background: #166534; color: #86efac; }
+    .descending { background: #7f1d1d; color: #fca5a5; }
+    .level { background: #1e3a5f; color: #93c5fd; }
+
+    .empty-state {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1000;
+      text-align: center;
+      color: #94a3b8;
+    }
+
+    .empty-state .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid #334155;
+      border-top-color: #60a5fa;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 12px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .update-time {
+      position: absolute;
+      bottom: 24px;
+      right: 24px;
+      z-index: 1000;
+      font-size: 11px;
+      color: #64748b;
+      background: rgba(15, 23, 42, 0.8);
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid #334155;
+    }
+
+    @media (max-width: 600px) {
+      .flight-panel { flex-direction: column; left: 12px; bottom: 12px; right: 12px; }
+      .flight-card { min-width: unset; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17.8 19.2L16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
+      </svg>
+      Realtime Flight Tracker
+    </div>
+    <div class="status-pill">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Connecting...</span>
+    </div>
+  </header>
+
+  <div id="map"></div>
+  <div class="flight-panel" id="flightPanel"></div>
+  <div class="update-time" id="updateTime" style="display:none"></div>
+  <div class="empty-state" id="emptyState">
+    <div class="spinner"></div>
+    <div>Waiting for flight data...</div>
+  </div>
+
+  <script>
+    const map = L.map("map", {
+      center: [22.5, 82.5],
+      zoom: 5,
+      zoomControl: false
+    });
+
+    L.control.zoom({ position: "topright" }).addTo(map);
+
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+      maxZoom: 18
+    }).addTo(map);
+
+    function planeIcon(heading) {
+      return L.divIcon({
+        className: "",
+        html: `<svg width="32" height="32" viewBox="0 0 24 24" style="transform:rotate(${heading || 0}deg);filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))">
+          <path d="M17.8 19.2L16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" fill="#60a5fa" stroke="#1e3a5f" stroke-width=".5"/>
+        </svg>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+      });
+    }
+
+    const markers = {};
+    const dot = document.getElementById("statusDot");
+    const statusText = document.getElementById("statusText");
+    const panel = document.getElementById("flightPanel");
+    const emptyState = document.getElementById("emptyState");
+    const updateTimeEl = document.getElementById("updateTime");
+
+    let lastUpdate = 0;
+
+    function fmtAlt(m) { return (m * 3.28084).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + " ft"; }
+    function fmtSpeed(ms) { return (ms * 3.6).toFixed(0) + " km/h"; }
+    function verticalStatus(vr) {
+      if (vr > 0.5) return { label: "Climbing", cls: "climbing" };
+      if (vr < -0.5) return { label: "Descending", cls: "descending" };
+      return { label: "Level", cls: "level" };
+    }
+
+    function renderCards(flights) {
+      panel.innerHTML = flights.map(f => {
+        const vs = verticalStatus(f.verticalRate);
+        return `<div class="flight-card">
+          <div class="callsign">${f.callsign || "N/A"}</div>
+          <div class="icao">ICAO ${f.icao24}</div>
+          <div class="stat-row"><span class="stat-label">Altitude</span><span class="stat-value">${fmtAlt(f.baroAltitude)}</span></div>
+          <div class="stat-row"><span class="stat-label">Speed</span><span class="stat-value">${fmtSpeed(f.velocity)}</span></div>
+          <div class="stat-row"><span class="stat-label">Heading</span><span class="stat-value">${(f.heading || 0).toFixed(1)}°</span></div>
+          <div class="stat-row"><span class="stat-label">Lat / Lon</span><span class="stat-value">${f.lat.toFixed(2)}, ${f.lon.toFixed(2)}</span></div>
+          <div class="vertical-badge ${vs.cls}">${vs.label}</div>
+        </div>`;
+      }).join("");
+    }
+
+    function updateMarkers(flights) {
+      const activeIds = new Set(flights.map(f => f.icao24));
+      Object.keys(markers).forEach(id => {
+        if (!activeIds.has(id)) { map.removeLayer(markers[id]); delete markers[id]; }
+      });
+      flights.forEach(f => {
+        const pos = [f.lat, f.lon];
+        if (markers[f.icao24]) {
+          markers[f.icao24].setLatLng(pos);
+          markers[f.icao24].setIcon(planeIcon(f.heading));
+        } else {
+          markers[f.icao24] = L.marker(pos, { icon: planeIcon(f.heading) })
+            .bindTooltip(f.callsign || f.icao24, { permanent: true, direction: "top", offset: [0, -16], className: "" })
+            .addTo(map);
+        }
+      });
+    }
+
+    const socket = io();
+
+    socket.on("connect", () => {
+      dot.classList.add("connected");
+      dot.classList.remove("stale");
+      statusText.textContent = "Connected";
+    });
+
+    socket.on("disconnect", () => {
+      dot.classList.remove("connected");
+      statusText.textContent = "Reconnecting...";
+    });
+
+    socket.on("flights:update", (data) => {
+      lastUpdate = Date.now();
+      emptyState.style.display = "none";
+      updateTimeEl.style.display = "block";
+      updateTimeEl.textContent = "Last update: " + new Date(data.timestamp).toLocaleTimeString();
+      updateMarkers(data.flights);
+      renderCards(data.flights);
+    });
+
+    setInterval(() => {
+      if (lastUpdate && Date.now() - lastUpdate > 30000) {
+        dot.classList.add("stale");
+        dot.classList.remove("connected");
+        statusText.textContent = "Stale";
+      }
+    }, 5000);
+  </script>
+</body>
+</html>

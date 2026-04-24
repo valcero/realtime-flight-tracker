@@ -1,0 +1,12 @@
+services:
+  - type: web
+    runtime: node
+    name: realtime-flight-tracker
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: node src/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: POLL_INTERVAL_MS
+        value: "10000"

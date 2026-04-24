@@ -1,3 +1,4 @@
+const path = require("path");
 const http = require("http");
 const express = require("express");
 const { Server } = require("socket.io");
@@ -8,6 +9,7 @@ const { selectActiveFlights } = require("./selectFlights");
 const { config } = require("./config");
 
 const app = express();
+app.use(express.static(path.join(__dirname, "..", "public")));
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
@@ -46,7 +48,6 @@ async function pollAndBroadcast() {
     io.emit("flights:update", payload);
   } catch (err) {
     console.error("[poll] failed:", err?.message || err);
-    // Keep server alive; do not crash on transient API errors.
     // If we have old data, clients will still see it on reconnect.
   } finally {
     pollInFlight = false;

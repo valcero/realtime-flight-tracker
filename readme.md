@@ -25,7 +25,11 @@ realtime-flight-tracker/
 │   ├── filterFlights.js        # Airborne flight filtering and state vector mapping
 │   ├── selectFlights.js        # Picks top 2 flights by velocity
 │   └── config.js               # Environment-driven configuration
+├── public/
+│   └── index.html              # Web dashboard (Leaflet map + Socket.IO client)
 ├── client.js                   # Quick CLI test client
+├── Dockerfile                  # Production container image
+├── render.yaml                 # Render.com deployment blueprint
 ├── package.json
 │
 └── mobile/                     # React Native (Expo) app
@@ -124,6 +128,34 @@ Each flight object:
 }
 ```
 
+## Live Web Dashboard
+
+The backend serves a web dashboard at the root URL (`/`). Once deployed, visiting the URL shows a dark-themed Leaflet map with live flight markers, info cards, and connection status — no mobile app required.
+
+```
+Browser ──(Socket.IO)──> Deployed Backend ──(HTTP poll)──> OpenSky API
+```
+
+## Deployment
+
+### Option A: Deploy to Render (Recommended, free tier)
+
+1. Push this repo to GitHub.
+2. Go to [dashboard.render.com](https://dashboard.render.com) → **New** → **Blueprint**.
+3. Connect your GitHub repo. Render will detect `render.yaml` and configure everything automatically.
+4. Click **Apply** — your app will be live at `https://realtime-flight-tracker-XXXX.onrender.com`.
+
+Or deploy manually: **New** → **Web Service** → connect repo → set **Build Command** to `npm ci --omit=dev`, **Start Command** to `node src/server.js`, plan **Free**.
+
+### Option B: Deploy with Docker
+
+```bash
+docker build -t flight-tracker .
+docker run -p 3000:3000 flight-tracker
+```
+
+The container listens on port 3000 and serves both the WebSocket API and the web dashboard.
+
 ## Assumptions and Decisions
 
 - **Socket.IO over raw WebSocket:** Socket.IO was chosen over a plain `ws` server because it provides built-in reconnection, heartbeats, and event-based messaging out of the box, which simplifies both backend and frontend code.
@@ -143,4 +175,4 @@ Each flight object:
 - **Error retry with backoff in UI:** Show a countdown timer in the connection banner so users know when the next reconnect attempt will happen.
 - **WebSocket authentication:** Add a simple token-based auth layer to prevent unauthorized clients from connecting.
 - **Rate limiting:** Protect the OpenSky API calls with proper rate limiting to respect their usage policies.
-- **Deployment:** Containerize the backend with Docker and add instructions for deploying to a cloud provider.
+- **Flight trail history:** Draw polyline trails behind each tracked flight to visualize the route taken.

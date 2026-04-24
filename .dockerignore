@@ -1,0 +1,6 @@
+node_modules
+mobile
+.env
+.git
+*.md
+client.js
